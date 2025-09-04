@@ -3,21 +3,13 @@ package controllers
 import (
 	"log"
 	"os"
-
 	"uptime/database"
 	"uptime/models"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-type BulkURLResponse struct {
-	Code    int         `json:"code"`
-	Msg     string      `json:"msg"`
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data"`
-}
-
-func GetBulkURL(c *fiber.Ctx) error {
+func LastURLs(c *fiber.Ctx) error {
 	key := c.Get("Authorization")
 	apiKey := os.Getenv("UPTIME_API_KEY")
 	if key != apiKey {
@@ -29,20 +21,8 @@ func GetBulkURL(c *fiber.Ctx) error {
 		})
 	}
 
-	var body struct {
-		URLs []string `json:"urls"`
-	}
-	if err := c.BodyParser(&body); err != nil || len(body.URLs) == 0 {
-		return c.Status(422).JSON(BulkURLResponse{
-			Code:    422,
-			Msg:     "URL is empty",
-			Success: false,
-			Data:    nil,
-		})
-	}
-
 	var nodes []models.Node
-	if err := database.DB.Preload("Histories").Where("url IN ?", body.URLs).Order("id desc").Find(&nodes).Error; err != nil {
+	if err := database.DB.Preload("Histories").Order("id desc").Find(&nodes).Error; err != nil {
 		log.Println("Database error:", err)
 		return c.Status(500).JSON(BulkURLResponse{
 			Code:    500,
@@ -68,6 +48,13 @@ func GetBulkURL(c *fiber.Ctx) error {
 		ID        uint              `json:"id"`
 		URL       string            `json:"url"`
 		Histories []HistoryResponse `json:"histories"`
+	}
+
+	boolToInt := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
 	}
 
 	result := make([]NodeResponse, len(nodes))

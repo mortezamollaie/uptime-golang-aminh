@@ -37,4 +37,5 @@ func SetupRoutes(app *fiber.App) {
 	api.Get("/report/get-smart-query", controllers.GetNodeSmartReport)
 	api.Get("/report/all-from-history", controllers.AllFormHistory)
 	api.Post("/report/bulk-url/get", controllers.GetBulkURL)
+	api.Get("/report/last", controllers.LastURLs)
 }
