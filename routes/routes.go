@@ -32,4 +32,6 @@ func SetupRoutes(app *fiber.App) {
 	histories.Delete("/:id", controllers.DeleteHistory)
 
 	api.Get("/check-uptime", controllers.CheckUptime)
+
+	api.Get("/report/get", controllers.GetNodeReport)
 }
