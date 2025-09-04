@@ -34,4 +34,5 @@ func SetupRoutes(app *fiber.App) {
 	api.Get("/check-uptime", controllers.CheckUptime)
 
 	api.Get("/report/get", controllers.GetNodeReport)
+	api.Get("/report/get-smart-query", controllers.GetNodeSmartReport)
 }
