@@ -20,6 +20,8 @@ type ApiResponse struct {
 }
 
 func main() {
+	fmt.Println("Start Progress")
+
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("No .env file found")
 	}
@@ -61,53 +63,20 @@ func main() {
 		return
 	}
 
-	syncNodes(apiRes.Data)
-}
+	for _, url := range apiRes.Data {
+		if url == "" {
+			continue
+		}
 
-func syncNodes(urls []string) {
-	if len(urls) == 0 {
-		fmt.Println("No URLs from API")
-		return
-	}
-
-	var existingNodes []models.Node
-	database.DB.Find(&existingNodes)
-
-	existingUrls := make([]string, len(existingNodes))
-	for i, node := range existingNodes {
-		existingUrls[i] = node.URL
-	}
-
-	toDelete := difference(existingUrls, urls)
-	if len(toDelete) > 0 {
-		database.DB.Where("url IN ?", toDelete).Delete(&models.Node{})
-		fmt.Println("Deleted nodes:", strings.Join(toDelete, ", "))
-	}
-
-	toAdd := difference(urls, existingUrls)
-	for _, url := range toAdd {
-		if url != "" {
-			database.DB.Create(&models.Node{URL: url})
+		var node models.Node
+		if err := database.DB.Where("url = ?", url).First(&node).Error; err != nil {
+			if err.Error() == "record not found" || strings.Contains(err.Error(), "record not found") {
+				database.DB.Create(&models.Node{URL: url})
+			} else {
+				fmt.Println("Error checking node:", err)
+			}
 		}
 	}
 
-	if len(toAdd) > 0 {
-		fmt.Println("Added nodes:", strings.Join(toAdd, ", "))
-	} else {
-		fmt.Println("No new nodes to add.")
-	}
-}
-
-func difference(a, b []string) []string {
-	m := make(map[string]bool)
-	for _, item := range b {
-		m[item] = true
-	}
-	var diff []string
-	for _, item := range a {
-		if !m[item] {
-			diff = append(diff, item)
-		}
-	}
-	return diff
+	fmt.Println("End Progress")
 }
