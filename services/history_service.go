@@ -7,8 +7,19 @@ import (
 )
 
 func CreateHistory(history *models.History) (*models.History, error) {
+	if history == nil {
+		return nil, errors.New("history cannot be nil")
+	}
+	
+	if history.NodeID == 0 {
+		return nil, errors.New("NodeID is required")
+	}
+	
 	err := repositories.CreateHistory(history)
-	return history, err
+	if err != nil {
+		return nil, err
+	}
+	return history, nil
 }
 
 func GetAllHistories() ([]models.History, error) {
@@ -18,20 +29,39 @@ func GetAllHistories() ([]models.History, error) {
 }
 
 func GetHistory(id uint) (*models.History, error) {
+	if id == 0 {
+		return nil, errors.New("invalid ID")
+	}
+	
 	history := &models.History{}
 	err := repositories.GetHistoryByID(id, history)
 	if err != nil {
-		return nil, errors.New("History not found")
+		return nil, errors.New("history not found")
 	}
 	return history, nil
 }
 
 func UpdateHistory(history *models.History) (*models.History, error) {
+	if history == nil {
+		return nil, errors.New("history cannot be nil")
+	}
+	
+	if history.ID == 0 {
+		return nil, errors.New("invalid history ID")
+	}
+	
 	err := repositories.UpdateHistory(history)
-	return history, err
+	if err != nil {
+		return nil, err
+	}
+	return history, nil
 }
 
 func DeleteHistoryByID(id uint) error {
+	if id == 0 {
+		return errors.New("invalid ID")
+	}
+	
 	history, err := GetHistory(id)
 	if err != nil {
 		return err

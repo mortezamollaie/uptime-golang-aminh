@@ -38,7 +38,7 @@ func AllFormHistory(c *fiber.Ctx) error {
 	up := c.Query("up")
 	down := c.Query("down")
 	suspended := c.Query("suspended")
-	exception := c.Query("exeption")
+	exception := c.Query("exception")
 
 	db := database.DB.Model(&models.History{})
 
