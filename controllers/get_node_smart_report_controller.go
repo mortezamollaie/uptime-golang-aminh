@@ -1,17 +1,26 @@
 package controllers
 
 import (
+	"context"
 	"log"
 	"os"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"uptime/database"
 	"uptime/models"
+	"uptime/utils"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 func GetNodeSmartReport(c *fiber.Ctx) error {
+	// Set timeout context for the entire request
+	ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
+	defer cancel()
+
 	key := c.Get("Authorization")
 	apiKey := os.Getenv("UPTIME_API_KEY")
 	log.Println("Header:", key, "Env:", apiKey)
@@ -36,7 +45,7 @@ func GetNodeSmartReport(c *fiber.Ctx) error {
 	}
 
 	var node models.Node
-	if err := database.DB.Where("url = ?", url).First(&node).Error; err != nil {
+	if err := database.DB.WithContext(ctx).Where("url = ?", url).First(&node).Error; err != nil {
 		return c.Status(404).JSON(ReportResponse{
 			Code:    404,
 			Msg:     "URL Not Found",
@@ -67,7 +76,7 @@ func GetNodeSmartReport(c *fiber.Ctx) error {
 	suspended := c.Query("suspended")
 	exception := c.Query("exception")
 
-	db := database.DB.Model(&models.NodeLog{}).Where("node_id = ?", node.ID)
+	db := database.DB.WithContext(ctx).Model(&models.NodeLog{}).Where("node_id = ?", node.ID)
 
 	if startDateStr != "" && endDateStr != "" {
 		startDate, err := time.Parse("2006-01-02", startDateStr)
@@ -151,6 +160,9 @@ func GetNodeSmartReport(c *fiber.Ctx) error {
 	}
 
 	var reports []models.NodeLog
+	
+	// Measure database query time
+	dbStartTime := time.Now()
 	if err := db.Find(&reports).Error; err != nil {
 		log.Println("Database error:", err)
 		return c.Status(500).JSON(ReportResponse{
@@ -160,6 +172,8 @@ func GetNodeSmartReport(c *fiber.Ctx) error {
 			Data:    nil,
 		})
 	}
+	dbDuration := time.Since(dbStartTime)
+	log.Printf("Smart Query database took: %v for %d records", dbDuration, len(reports))
 
 	type NodeLogResponse struct {
 		ID        uint     `json:"id"`
@@ -174,22 +188,99 @@ func GetNodeSmartReport(c *fiber.Ctx) error {
 	}
 
 	reportData := make([]NodeLogResponse, len(reports))
-	downCount := 0
-	for i, r := range reports {
-		if !r.Up {
-			downCount++
+	var downCount int64 // Use atomic counter for thread-safe counting
+	
+	// Optimize parallel processing with worker pool pattern
+	if len(reports) > 0 {
+		// Use worker pool for better resource management
+		numWorkers := runtime.NumCPU()
+		if len(reports) < 1000 {
+			// For small datasets, use fewer workers to avoid overhead
+			numWorkers = utils.Min(numWorkers, utils.Max(1, len(reports)/100))
+		} else {
+			// For large datasets, use more workers but cap at CPU count * 2
+			numWorkers = utils.Min(numWorkers*2, 16)
 		}
-		reportData[i] = NodeLogResponse{
-			ID:        r.ID,
-			NodeID:    r.NodeID,
-			Delay:     r.Delay,
-			Status:    r.Status,
-			Up:        boolToInt(r.Up),
-			Suspended: boolToInt(r.Suspended),
-			Exception: r.Exception,
-			CreatedAt: r.CreatedAt.Unix(),
-			UpdatedAt: r.UpdatedAt.Unix(),
+		
+		if numWorkers == 0 {
+			numWorkers = 1
 		}
+
+		// Create jobs channel
+		jobs := make(chan int, len(reports))
+		var wg sync.WaitGroup
+		var processedCount int64
+
+		// Start workers
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				localDownCount := int64(0)
+				
+				for {
+					select {
+					case <-ctx.Done():
+						// Exit early if context is cancelled
+						atomic.AddInt64(&downCount, localDownCount)
+						return
+					case idx, ok := <-jobs:
+						if !ok {
+							atomic.AddInt64(&downCount, localDownCount)
+							return
+						}
+						
+						// Process single item
+						r := reports[idx]
+						if !r.Up {
+							localDownCount++
+						}
+						
+						reportData[idx] = NodeLogResponse{
+							ID:        r.ID,
+							NodeID:    r.NodeID,
+							Delay:     r.Delay,
+							Status:    r.Status,
+							Up:        boolToInt(r.Up),
+							Suspended: boolToInt(r.Suspended),
+							Exception: r.Exception,
+							CreatedAt: r.CreatedAt.Unix(),
+							UpdatedAt: r.UpdatedAt.Unix(),
+						}
+						
+						atomic.AddInt64(&processedCount, 1)
+					}
+				}
+			}()
+		}
+
+		// Send jobs to workers
+		go func() {
+			defer close(jobs)
+			for i := 0; i < len(reports); i++ {
+				select {
+				case <-ctx.Done():
+					return
+				case jobs <- i:
+				}
+			}
+		}()
+
+		// Wait for all workers to finish
+		wg.Wait()
+
+		// Check if context was cancelled during processing
+		if ctx.Err() != nil {
+			return c.Status(408).JSON(ReportResponse{
+				Code:    408,
+				Msg:     "Request timeout during data processing",
+				Success: false,
+				Data:    nil,
+			})
+		}
+
+		log.Printf("Smart Report: Processed %d items with %d workers, found %d down entries", 
+			atomic.LoadInt64(&processedCount), numWorkers, atomic.LoadInt64(&downCount))
 	}
 
 	return c.JSON(ReportResponse{

@@ -1,11 +1,17 @@
 package controllers
 
 import (
+	"context"
 	"log"
 	"os"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"uptime/database"
 	"uptime/models"
+	"uptime/utils"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -18,6 +24,10 @@ type BulkURLResponse struct {
 }
 
 func GetBulkURL(c *fiber.Ctx) error {
+	// Set timeout context for the entire request
+	ctx, cancel := context.WithTimeout(c.Context(), 45*time.Second)
+	defer cancel()
+
 	key := c.Get("Authorization")
 	apiKey := os.Getenv("UPTIME_API_KEY")
 	if key != apiKey {
@@ -42,7 +52,7 @@ func GetBulkURL(c *fiber.Ctx) error {
 	}
 
 	var nodes []models.Node
-	if err := database.DB.Preload("Histories").Where("url IN ?", body.URLs).Order("id desc").Find(&nodes).Error; err != nil {
+	if err := database.DB.WithContext(ctx).Preload("Histories").Where("url IN ?", body.URLs).Order("id desc").Find(&nodes).Error; err != nil {
 		log.Println("Database error:", err)
 		return c.Status(500).JSON(BulkURLResponse{
 			Code:    500,
@@ -71,26 +81,108 @@ func GetBulkURL(c *fiber.Ctx) error {
 	}
 
 	result := make([]NodeResponse, len(nodes))
-	for i, n := range nodes {
-		histories := make([]HistoryResponse, len(n.Histories))
-		for j, h := range n.Histories {
-			histories[j] = HistoryResponse{
-				ID:        h.ID,
-				NodeID:    h.NodeID,
-				Delay:     h.Delay,
-				Status:    h.Status,
-				Up:        boolToInt(h.Up),
-				Suspended: boolToInt(h.Suspended),
-				Exception: h.Exception,
-				CreatedAt: h.CreatedAt.Unix(),
-				UpdatedAt: h.UpdatedAt.Unix(),
+	
+	// Optimize parallel processing with worker pool pattern for nested data
+	if len(nodes) > 0 {
+		// Calculate total work (nodes + their histories)
+		totalHistories := 0
+		for _, node := range nodes {
+			totalHistories += len(node.Histories)
+		}
+		
+		// Use worker pool for better resource management
+		numWorkers := runtime.NumCPU()
+		if len(nodes) < 100 {
+			// For small datasets, use fewer workers
+			numWorkers = utils.Min(numWorkers, utils.Max(1, len(nodes)/10))
+		} else {
+			// For large datasets, use more workers but cap appropriately
+			numWorkers = utils.Min(numWorkers*2, 16)
+		}
+		
+		if numWorkers == 0 {
+			numWorkers = 1
+		}
+
+		// Create jobs channel for nodes
+		jobs := make(chan int, len(nodes))
+		var wg sync.WaitGroup
+		var processedCount int64
+
+		// Start workers
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				
+				for {
+					select {
+					case <-ctx.Done():
+						// Exit early if context is cancelled
+						return
+					case nodeIdx, ok := <-jobs:
+						if !ok {
+							return
+						}
+						
+						// Process single node with all its histories
+						n := nodes[nodeIdx]
+						histories := make([]HistoryResponse, len(n.Histories))
+						
+						// Process histories for this node
+						for j, h := range n.Histories {
+							histories[j] = HistoryResponse{
+								ID:        h.ID,
+								NodeID:    h.NodeID,
+								Delay:     h.Delay,
+								Status:    h.Status,
+								Up:        boolToInt(h.Up),
+								Suspended: boolToInt(h.Suspended),
+								Exception: h.Exception,
+								CreatedAt: h.CreatedAt.Unix(),
+								UpdatedAt: h.UpdatedAt.Unix(),
+							}
+						}
+						
+						result[nodeIdx] = NodeResponse{
+							ID:        n.ID,
+							URL:       n.URL,
+							Histories: histories,
+						}
+						
+						atomic.AddInt64(&processedCount, 1)
+					}
+				}
+			}()
+		}
+
+		// Send jobs to workers
+		go func() {
+			defer close(jobs)
+			for i := 0; i < len(nodes); i++ {
+				select {
+				case <-ctx.Done():
+					return
+				case jobs <- i:
+				}
 			}
+		}()
+
+		// Wait for all workers to finish
+		wg.Wait()
+
+		// Check if context was cancelled during processing
+		if ctx.Err() != nil {
+			return c.Status(408).JSON(BulkURLResponse{
+				Code:    408,
+				Msg:     "Request timeout during data processing",
+				Success: false,
+				Data:    nil,
+			})
 		}
-		result[i] = NodeResponse{
-			ID:        n.ID,
-			URL:       n.URL,
-			Histories: histories,
-		}
+
+		log.Printf("Bulk URL: Processed %d nodes with %d total histories using %d workers", 
+			atomic.LoadInt64(&processedCount), totalHistories, numWorkers)
 	}
 
 	return c.JSON(BulkURLResponse{

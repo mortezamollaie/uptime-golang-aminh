@@ -22,6 +22,7 @@ import (
 func startUptimeChecker() *cron.Cron {
 	c := cron.New()
 
+	// Use the configured check interval directly
 	checkInterval := "@every " + config.AppConfig.UptimeChecker.CheckInterval.String()
 	c.AddFunc(checkInterval, func() {
 		var nodes []models.Node

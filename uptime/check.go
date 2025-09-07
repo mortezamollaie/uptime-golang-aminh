@@ -16,6 +16,29 @@ import (
 
 var SuspendedWords = []string{"suspended", "Suspended", "account suspended", "سایت مسدود است", "مسدود"}
 
+// readBodyWithTimeout reads the response body with a separate timeout context
+func readBodyWithTimeout(body io.ReadCloser, ctx context.Context) ([]byte, error) {
+	done := make(chan struct {
+		data []byte
+		err  error
+	}, 1)
+	
+	go func() {
+		data, err := io.ReadAll(body)
+		done <- struct {
+			data []byte
+			err  error
+		}{data, err}
+	}()
+	
+	select {
+	case result := <-done:
+		return result.data, result.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 func Check(nodes []models.Node) {
 	maxWorkers := config.AppConfig.UptimeChecker.MaxWorkers
 	requestTimeout := config.AppConfig.UptimeChecker.RequestTimeout
@@ -49,25 +72,34 @@ func Check(nodes []models.Node) {
 			
 			resp, err := http.DefaultClient.Do(req)
 			delay := time.Since(start).Seconds()
-			cancel()
-
+			
 			var status uint
 			var up bool
 			var suspended bool
 			var exception *string
 
 			if err != nil {
+				// Handle timeout and other errors
 				exc := err.Error()
 				exception = &exc
 				status = 0
 				up = false
 				suspended = false
+				
+				// For timeout errors, set delay to the actual timeout duration
+				if strings.Contains(err.Error(), "context deadline exceeded") {
+					delay = requestTimeout.Seconds()
+				}
 			} else {
 				defer resp.Body.Close()
 				status = uint(resp.StatusCode)
 				up = status >= 200 && status < 300
 
-				bodyBytes, err := io.ReadAll(resp.Body)
+				// Read body with a separate timeout context to avoid cancellation issues
+				bodyCtx, bodyCancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer bodyCancel()
+				
+				bodyBytes, err := readBodyWithTimeout(resp.Body, bodyCtx)
 				if err != nil {
 					log.Printf("Error reading response body for %s: %v", n.URL, err)
 				} else {
@@ -80,6 +112,9 @@ func Check(nodes []models.Node) {
 					}
 				}
 			}
+			
+			// Always cancel the request context after we're done
+			cancel()
 
 			nodeLog := models.NodeLog{
 				NodeID:    n.ID,

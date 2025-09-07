@@ -42,18 +42,18 @@ func Load() {
 	AppConfig.Server.Port = getEnv("PORT", "3000")
 	
 	// Uptime checker config
-	checkIntervalStr := getEnv("CHECK_INTERVAL", "30s")
+	checkIntervalStr := getEnv("CHECK_INTERVAL", "2m")
 	if checkInterval, err := time.ParseDuration(checkIntervalStr); err == nil {
 		AppConfig.UptimeChecker.CheckInterval = checkInterval
 	} else {
-		AppConfig.UptimeChecker.CheckInterval = 30 * time.Second
+		AppConfig.UptimeChecker.CheckInterval = 2 * time.Minute
 	}
 	
-	timeoutStr := getEnv("REQUEST_TIMEOUT", "30s")
+	timeoutStr := getEnv("REQUEST_TIMEOUT", "45s")
 	if timeout, err := time.ParseDuration(timeoutStr); err == nil {
 		AppConfig.UptimeChecker.RequestTimeout = timeout
 	} else {
-		AppConfig.UptimeChecker.RequestTimeout = 30 * time.Second
+		AppConfig.UptimeChecker.RequestTimeout = 45 * time.Second
 	}
 	
 	maxWorkersStr := getEnv("MAX_WORKERS", "50")
