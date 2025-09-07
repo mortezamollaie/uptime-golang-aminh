@@ -36,24 +36,24 @@ func Load() {
 	AppConfig = &Config{}
 	
 	// Database config
-	AppConfig.Database.DSN = getEnv("MYSQL_DSN", "root:@tcp(127.0.0.1:3306)/uptime_db?charset=utf8mb4&parseTime=True&loc=Local")
+	AppConfig.Database.DSN = getEnv("MYSQL_DSN", "root:@tcp(127.0.0.1:3306)/ms-uptime?charset=utf8mb4&parseTime=True&loc=Local")
 	
 	// Server config
 	AppConfig.Server.Port = getEnv("PORT", "3000")
 	
 	// Uptime checker config
-	checkIntervalStr := getEnv("CHECK_INTERVAL", "2m")
+	checkIntervalStr := getEnv("CHECK_INTERVAL", "3m")
 	if checkInterval, err := time.ParseDuration(checkIntervalStr); err == nil {
 		AppConfig.UptimeChecker.CheckInterval = checkInterval
 	} else {
-		AppConfig.UptimeChecker.CheckInterval = 2 * time.Minute
+		AppConfig.UptimeChecker.CheckInterval = 1 * time.Minute
 	}
 	
-	timeoutStr := getEnv("REQUEST_TIMEOUT", "45s")
+	timeoutStr := getEnv("REQUEST_TIMEOUT", "60s")
 	if timeout, err := time.ParseDuration(timeoutStr); err == nil {
 		AppConfig.UptimeChecker.RequestTimeout = timeout
 	} else {
-		AppConfig.UptimeChecker.RequestTimeout = 45 * time.Second
+		AppConfig.UptimeChecker.RequestTimeout = 60 * time.Second
 	}
 	
 	maxWorkersStr := getEnv("MAX_WORKERS", "50")

@@ -22,7 +22,6 @@ import (
 func startUptimeChecker() *cron.Cron {
 	c := cron.New()
 
-	// Use the configured check interval directly
 	checkInterval := "@every " + config.AppConfig.UptimeChecker.CheckInterval.String()
 	c.AddFunc(checkInterval, func() {
 		var nodes []models.Node
@@ -63,14 +62,12 @@ func main() {
 		},
 	})
 
-	// Middleware
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New())
 
 	routes.SetupRoutes(app)
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
@@ -85,10 +82,8 @@ func main() {
 	<-quit
 	log.Println("Shutting down server...")
 	
-	// Stop cron jobs
 	cron.Stop()
 	
-	// Shutdown server
 	if err := app.Shutdown(); err != nil {
 		log.Fatal("Server forced to shutdown:", err)
 	}
