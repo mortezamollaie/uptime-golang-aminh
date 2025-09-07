@@ -8,32 +8,18 @@ import (
 )
 
 func main() {
-	fmt.Println("🚀 Database Index Optimizer")
-	fmt.Println("============================")
-	
-	// Initialize config and database
 	config.Load()
 	database.Connect()
 	
-	// Get raw SQL connection
 	sqlDB, err := database.DB.DB()
 	if err != nil {
-		log.Fatal("❌ Failed to get database connection:", err)
+		log.Fatal("Failed to get database connection:", err)
 	}
 	
-	fmt.Println("✅ Connected to database")
-	
-	// Fix AUTO_INCREMENT if needed
-	fmt.Println("\n🔧 Checking table structure...")
 	_, err = sqlDB.Exec("ALTER TABLE node_logs MODIFY COLUMN id bigint UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY")
 	if err != nil {
-		fmt.Printf("⚠️  Structure already correct or error: %v\n", err)
-	} else {
-		fmt.Println("✅ Table structure fixed")
+		fmt.Printf("Structure error: %v\n", err)
 	}
-	
-	// Create indexes
-	fmt.Println("\n📚 Creating performance indexes...")
 	
 	indexes := []struct{
 		name string
@@ -50,39 +36,23 @@ func main() {
 	}
 	
 	successCount := 0
-	for i, index := range indexes {
-		fmt.Printf("Creating index %d/%d (%s)... ", i+1, len(indexes), index.name)
-		
-		// Check if index exists
+	for _, index := range indexes {
 		var exists int
 		err = sqlDB.QueryRow("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = 'ms-uptime' AND table_name = 'node_logs' AND index_name = ?", index.name).Scan(&exists)
 		
 		if err == nil && exists > 0 {
-			fmt.Printf("⏭️  Already exists\n")
 			successCount++
 			continue
 		}
 		
 		_, err = sqlDB.Exec(index.sql)
 		if err != nil {
-			fmt.Printf("❌ Failed: %v\n", err)
+			fmt.Printf("Index %s failed: %v\n", index.name, err)
 		} else {
-			fmt.Printf("✅ Success\n")
 			successCount++
 		}
 	}
 	
-	// Analyze tables
-	fmt.Println("\n🔍 Analyzing tables...")
-	_, err = sqlDB.Exec("ANALYZE TABLE nodes, node_logs")
-	if err != nil {
-		fmt.Printf("⚠️  Analyze failed: %v\n", err)
-	} else {
-		fmt.Println("✅ Tables analyzed")
-	}
-	
-	// Show results
-	fmt.Printf("\n🎉 Optimization completed!\n")
-	fmt.Printf("📊 %d/%d indexes created successfully\n", successCount, len(indexes))
-	fmt.Println("🚀 Database is now optimized for high performance!")
+	sqlDB.Exec("ANALYZE TABLE nodes, node_logs")
+	fmt.Printf("Optimization complete: %d/%d indexes\n", successCount, len(indexes))
 }
