@@ -9,15 +9,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"uptime/config"
 	"uptime/database"
 	"uptime/models"
 )
 
-var SuspendedWords = []string{"suspended", "account suspended", "سایت مسدود است", "مسدود"}
-
-const MaxWorkers = 50
+var SuspendedWords = []string{"suspended", "Suspended", "account suspended", "سایت مسدود است", "مسدود"}
 
 func Check(nodes []models.Node) {
+	maxWorkers := config.AppConfig.UptimeChecker.MaxWorkers
+	requestTimeout := config.AppConfig.UptimeChecker.RequestTimeout
 	var histories []models.History
 	if err := database.DB.Find(&histories).Error; err != nil {
 		log.Printf("Error fetching histories: %v", err)
@@ -38,7 +39,7 @@ func Check(nodes []models.Node) {
 		for n := range jobs {
 			start := time.Now()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, n.URL, nil)
 			if err != nil {
 				cancel()
@@ -122,7 +123,7 @@ func Check(nodes []models.Node) {
 		}
 	}
 
-	for i := 0; i < MaxWorkers; i++ {
+	for i := 0; i < maxWorkers; i++ {
 		wg.Add(1)
 		go worker()
 	}

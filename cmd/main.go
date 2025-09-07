@@ -3,24 +3,27 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
 
+	"uptime/config"
 	"uptime/database"
 	"uptime/models"
 	"uptime/routes"
 	"uptime/uptime"
 )
 
-func startUptimeChecker() {
+func startUptimeChecker() *cron.Cron {
 	c := cron.New()
 
-	c.AddFunc("@every 1m", func() {
+	checkInterval := "@every " + config.AppConfig.UptimeChecker.CheckInterval.String()
+	c.AddFunc(checkInterval, func() {
 		var nodes []models.Node
 		if err := database.DB.Find(&nodes).Error; err != nil {
 			log.Println("Error fetching nodes:", err)
@@ -36,16 +39,15 @@ func startUptimeChecker() {
 	})
 
 	c.Start()
+	return c
 }
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: No .env file found, using system environment variables")
-	}
-
+	config.Load()
+	
 	database.Connect()
 
-	go startUptimeChecker()
+	cron := startUptimeChecker()
 
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -67,11 +69,28 @@ func main() {
 
 	routes.SetupRoutes(app)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3000"
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		port := config.AppConfig.Server.Port
+		log.Printf("Server starting on port %s", port)
+		if err := app.Listen(":" + port); err != nil {
+			log.Fatal("Server failed to start:", err)
+		}
+	}()
+
+	<-quit
+	log.Println("Shutting down server...")
+	
+	// Stop cron jobs
+	cron.Stop()
+	
+	// Shutdown server
+	if err := app.Shutdown(); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
 	}
 
-	log.Printf("Server starting on port %s", port)
-	log.Fatal(app.Listen(":" + port))
+	log.Println("Server exited")
 }

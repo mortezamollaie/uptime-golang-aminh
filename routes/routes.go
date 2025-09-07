@@ -7,6 +7,9 @@ import (
 )
 
 func SetupRoutes(app *fiber.App) {
+	// Health check endpoint
+	app.Get("/health", controllers.HealthCheck)
+	
 	api := app.Group("/api")
 
 	node := api.Group("/nodes")

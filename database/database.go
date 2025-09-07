@@ -2,23 +2,23 @@ package database
 
 import (
 	"fmt"
-	"os"
+	"uptime/config"
 	"uptime/models"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var DB *gorm.DB
 
 func Connect() {
-	dsn := os.Getenv("MYSQL_DSN")
-	if dsn == "" {
-		dsn = "root:@tcp(127.0.0.1:3306)/uptime_db?charset=utf8mb4&parseTime=True&loc=Local"
-	}
+	dsn := config.AppConfig.Database.DSN
 
 	var err error
-	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent), // کم کردن لاگ‌های اضافی
+	})
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
