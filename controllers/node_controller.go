@@ -9,6 +9,18 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// CreateNode creates a new monitoring node
+// @Summary Create a new node
+// @Description Add a new website/service to monitor
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Param node body object{url=string} true "Node URL"
+// @Success 201 {object} map[string]interface{} "Node created successfully"
+// @Failure 400 {object} map[string]string "Bad Request"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Security ApiKeyAuth
+// @Router /nodes [post]
 func CreateNode(c *fiber.Ctx) error {
 	type Request struct {
 		URL string `json:"url"`
@@ -39,6 +51,15 @@ func CreateNode(c *fiber.Ctx) error {
 	return c.Status(201).JSON(node)
 }
 
+// GetAllNodes retrieves all monitoring nodes
+// @Summary Get all nodes
+// @Description Retrieve a list of all monitored websites/services
+// @Tags nodes
+// @Produce json
+// @Success 200 {array} models.Node "List of nodes"
+// @Failure 500 {object} map[string]string "Internal Server Error"
+// @Security ApiKeyAuth
+// @Router /nodes [get]
 func GetAllNodes(c *fiber.Ctx) error {
 	nodes, err := services.GetAllNodes()
 	if err != nil {

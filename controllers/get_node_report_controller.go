@@ -31,6 +31,20 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// GetNodeReport retrieves monitoring report for a specific node
+// @Summary Get node report
+// @Description Get detailed monitoring report for a specific website/service
+// @Tags reports
+// @Produce json
+// @Param Authorization header string true "API Key"
+// @Param id query string false "Node ID"
+// @Param url query string false "Node URL"
+// @Success 200 {object} ReportResponse "Report data"
+// @Failure 401 {object} ReportResponse "Unauthorized"
+// @Failure 404 {object} ReportResponse "Node not found"
+// @Failure 500 {object} ReportResponse "Internal Server Error"
+// @Security ApiKeyAuth
+// @Router /report/get [get]
 func GetNodeReport(c *fiber.Ctx) error {
 	// Set timeout context for the entire request
 	ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)

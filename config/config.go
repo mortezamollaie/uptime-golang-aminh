@@ -30,19 +30,16 @@ var AppConfig *Config
 
 func Load() {
 	if err := godotenv.Load(); err != nil {
-		log.Println("⚠️ No .env file found, using system environment variables")
+		log.Println("No .env file found, using system environment variables")
 	}
 	
 	AppConfig = &Config{}
 	
-	// Database config
 	AppConfig.Database.DSN = getEnv("MYSQL_DSN", "root:@tcp(127.0.0.1:3306)/ms-uptime?charset=utf8mb4&parseTime=True&loc=Local")
 	
-	// Server config
 	AppConfig.Server.Port = getEnv("PORT", "3000")
 	
-	// Uptime checker config
-	checkIntervalStr := getEnv("CHECK_INTERVAL", "3m")
+	checkIntervalStr := getEnv("CHECK_INTERVAL", "5m")
 	if checkInterval, err := time.ParseDuration(checkIntervalStr); err == nil {
 		AppConfig.UptimeChecker.CheckInterval = checkInterval
 	} else {

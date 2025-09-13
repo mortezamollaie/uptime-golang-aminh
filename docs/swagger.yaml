@@ -1,0 +1,216 @@
+basePath: /api
+definitions:
+  controllers.ReportResponse:
+    properties:
+      code:
+        type: integer
+      data: {}
+      msg:
+        type: string
+      success:
+        type: boolean
+    type: object
+  models.History:
+    properties:
+      created_at:
+        type: string
+      delay:
+        type: number
+      exception:
+        type: string
+      id:
+        type: integer
+      node_id:
+        type: integer
+      status:
+        type: integer
+      suspended:
+        type: boolean
+      up:
+        type: boolean
+      updated_at:
+        type: string
+    type: object
+  models.Node:
+    properties:
+      created_at:
+        type: string
+      histories:
+        items:
+          $ref: '#/definitions/models.History'
+        type: array
+      id:
+        type: integer
+      node_logs:
+        items:
+          $ref: '#/definitions/models.NodeLog'
+        type: array
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  models.NodeLog:
+    properties:
+      created_at:
+        type: string
+      delay:
+        type: number
+      exception:
+        type: string
+      id:
+        type: integer
+      node_id:
+        description: کلید خارجی
+        type: integer
+      status:
+        type: integer
+      suspended:
+        type: boolean
+      up:
+        type: boolean
+      updated_at:
+        type: string
+    type: object
+host: localhost:3000
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: A comprehensive uptime monitoring system for websites
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Uptime Monitoring API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      description: Check the health status of the API and database connection
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service is healthy
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service is unhealthy
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - health
+  /nodes:
+    get:
+      description: Retrieve a list of all monitored websites/services
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of nodes
+          schema:
+            items:
+              $ref: '#/definitions/models.Node'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all nodes
+      tags:
+      - nodes
+    post:
+      consumes:
+      - application/json
+      description: Add a new website/service to monitor
+      parameters:
+      - description: Node URL
+        in: body
+        name: node
+        required: true
+        schema:
+          properties:
+            url:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Node created successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a new node
+      tags:
+      - nodes
+  /report/get:
+    get:
+      description: Get detailed monitoring report for a specific website/service
+      parameters:
+      - description: API Key
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Node ID
+        in: query
+        name: id
+        type: string
+      - description: Node URL
+        in: query
+        name: url
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Report data
+          schema:
+            $ref: '#/definitions/controllers.ReportResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ReportResponse'
+        "404":
+          description: Node not found
+          schema:
+            $ref: '#/definitions/controllers.ReportResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ReportResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get node report
+      tags:
+      - reports
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: X-API-Key
+    type: apiKey
+swagger: "2.0"

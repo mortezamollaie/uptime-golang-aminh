@@ -16,13 +16,12 @@ import (
 
 var SuspendedWords = []string{"suspended", "Suspended", "account suspended", "سایت مسدود است", "مسدود"}
 
-// readBodyWithTimeout reads the response body with a separate timeout context
 func readBodyWithTimeout(body io.ReadCloser, ctx context.Context) ([]byte, error) {
 	done := make(chan struct {
 		data []byte
 		err  error
 	}, 1)
-	
+
 	go func() {
 		data, err := io.ReadAll(body)
 		done <- struct {
@@ -30,7 +29,7 @@ func readBodyWithTimeout(body io.ReadCloser, ctx context.Context) ([]byte, error
 			err  error
 		}{data, err}
 	}()
-	
+
 	select {
 	case result := <-done:
 		return result.data, result.err
@@ -47,7 +46,7 @@ func Check(nodes []models.Node) {
 		log.Printf("Error fetching histories: %v", err)
 		return
 	}
-	
+
 	historyMap := make(map[uint]*models.History)
 	for i := range histories {
 		h := &histories[i]
@@ -69,24 +68,22 @@ func Check(nodes []models.Node) {
 				log.Printf("Error creating request for %s: %v", n.URL, err)
 				continue
 			}
-			
+
 			resp, err := http.DefaultClient.Do(req)
 			delay := time.Since(start).Seconds()
-			
+
 			var status uint
 			var up bool
 			var suspended bool
 			var exception *string
 
 			if err != nil {
-				// Handle timeout and other errors
-				exc := err.Error()
+				exc := fmt.Sprintf("request error: %v", err)
 				exception = &exc
 				status = 0
 				up = false
 				suspended = false
-				
-				// For timeout errors, set delay to the actual timeout duration
+
 				if strings.Contains(err.Error(), "context deadline exceeded") {
 					delay = requestTimeout.Seconds()
 				}
@@ -95,25 +92,32 @@ func Check(nodes []models.Node) {
 				status = uint(resp.StatusCode)
 				up = status >= 200 && status < 300
 
-				// Read body with a separate timeout context to avoid cancellation issues
+				if !up {
+					exc := fmt.Sprintf("HTTP error: status %d", status)
+					exception = &exc
+				}
+
 				bodyCtx, bodyCancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer bodyCancel()
-				
+
 				bodyBytes, err := readBodyWithTimeout(resp.Body, bodyCtx)
 				if err != nil {
+					exc := fmt.Sprintf("body read error: %v", err)
+					exception = &exc
 					log.Printf("Error reading response body for %s: %v", n.URL, err)
 				} else {
 					body := string(bodyBytes)
 					for _, word := range SuspendedWords {
 						if strings.Contains(strings.ToLower(body), strings.ToLower(word)) {
 							suspended = true
+							exc := "page contains suspended keywords"
+							exception = &exc
 							break
 						}
 					}
 				}
 			}
-			
-			// Always cancel the request context after we're done
+
 			cancel()
 
 			nodeLog := models.NodeLog{
@@ -153,8 +157,8 @@ func Check(nodes []models.Node) {
 				}
 			}
 
-			fmt.Printf("Checked: %s | Status: %d | Up: %v | Suspended: %v | Delay: %.2fs\n",
-				n.URL, status, up, suspended, delay)
+			fmt.Printf("Checked: %s | Status: %d | Up: %v | Suspended: %v | Delay: %.2fs | Exception: %v\n",
+				n.URL, status, up, suspended, delay, exception)
 		}
 	}
 

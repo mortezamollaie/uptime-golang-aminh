@@ -11,13 +11,34 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/robfig/cron/v3"
+	fiberSwagger "github.com/swaggo/fiber-swagger"
 
 	"uptime/config"
 	"uptime/database"
 	"uptime/models"
 	"uptime/routes"
 	"uptime/uptime"
+	_ "uptime/docs"
 )
+
+// @title Uptime Monitoring API
+// @version 1.0
+// @description A comprehensive uptime monitoring system for websites
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url http://www.swagger.io/support
+// @contact.email support@swagger.io
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:3000
+// @BasePath /api
+
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name X-API-Key
 
 func startUptimeChecker() *cron.Cron {
 	c := cron.New()
@@ -65,6 +86,9 @@ func main() {
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New())
+
+	// Swagger documentation
+	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
 	routes.SetupRoutes(app)
 
