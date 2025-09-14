@@ -16,8 +16,9 @@ import (
 	"uptime/config"
 	"uptime/database"
 	"uptime/models"
+	"uptime/monitoring"
 	"uptime/routes"
-	"uptime/uptime"
+	"uptime/internal/logcleanup"
 	_ "uptime/docs"
 )
 
@@ -44,7 +45,7 @@ func startUptimeChecker() *cron.Cron {
 	c := cron.New()
 
 	checkInterval := "@every " + config.AppConfig.UptimeChecker.CheckInterval.String()
-	c.AddFunc(checkInterval, func() {
+	_, err := c.AddFunc(checkInterval, func() {
 		var nodes []models.Node
 		if err := database.DB.Find(&nodes).Error; err != nil {
 			log.Println("Error fetching nodes:", err)
@@ -55,21 +56,38 @@ func startUptimeChecker() *cron.Cron {
 			return
 		}
 
-		uptime.Check(nodes)
+		monitoring.Check(nodes)
 		log.Println("Uptime check completed")
 	})
+	if err != nil {
+		log.Println("Failed to schedule uptime checker:", err)
+	}
 
 	c.Start()
 	return c
 }
 
 func main() {
+	// Load config
 	config.Load()
-	
+
+	// Connect to database
 	database.Connect()
 
-	cron := startUptimeChecker()
+	// Start uptime checker cron
+	uptimeCron := startUptimeChecker()
 
+	// Start log cleanup cron every 5 minutes
+	logCleanupCron := cron.New()
+	_, err := logCleanupCron.AddFunc("@every 5m", func() {
+		logcleanup.CleanupOldLogs()
+	})
+	if err != nil {
+		log.Println("Failed to schedule log cleanup:", err)
+	}
+	logCleanupCron.Start()
+
+	// Initialize Fiber app
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -83,6 +101,7 @@ func main() {
 		},
 	})
 
+	// Middlewares
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New())
@@ -90,8 +109,10 @@ func main() {
 	// Swagger documentation
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
+	// Setup routes
 	routes.SetupRoutes(app)
 
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
@@ -105,12 +126,13 @@ func main() {
 
 	<-quit
 	log.Println("Shutting down server...")
-	
-	cron.Stop()
-	
+
+	// Stop crons
+	uptimeCron.Stop()
+	logCleanupCron.Stop()
+
 	if err := app.Shutdown(); err != nil {
 		log.Fatal("Server forced to shutdown:", err)
 	}
-
 	log.Println("Server exited")
 }

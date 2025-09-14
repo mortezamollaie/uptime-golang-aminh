@@ -3,7 +3,7 @@ package controllers
 import (
 	"uptime/database"
 	"uptime/models"
-	"uptime/uptime"
+	"uptime/monitoring"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -18,7 +18,7 @@ func CheckUptime(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"message": "No nodes found"})
 	}
 
-	uptime.Check(nodes)
+	monitoring.Check(nodes)
 
 	return c.JSON(fiber.Map{"message": "Uptime check completed"})
 }
