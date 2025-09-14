@@ -19,4 +19,4 @@ COPY --from=builder /app/log_checker ./log_checker
 EXPOSE 3000
 ENV PORT=3000
 RUN chmod 755 ./uptime ./optimize ./log_checker
-CMD ["/bin/sh", "-c", "./optimize && ./uptime"]
+CMD ["/bin/sh", "-c", "./uptime"]
