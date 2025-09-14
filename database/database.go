@@ -24,10 +24,5 @@ func Connect() {
 
 	fmt.Println("✅ Connected to MySQL!")
 
-	// Migration disabled - using existing database structure
-	// if err := DB.AutoMigrate(&models.Node{}, &models.NodeLog{}, &models.History{}); err != nil {
-	// 	panic(fmt.Sprintf("failed to migrate database: %v", err))
-	// }
-
 	fmt.Println("✅ Database ready!")
 }

@@ -16,10 +16,7 @@ WORKDIR /app
 COPY --from=builder /app/uptime ./uptime
 COPY --from=builder /app/optimize ./optimize
 COPY --from=builder /app/log_checker ./log_checker
-COPY .env ./
 EXPOSE 3000
 ENV PORT=3000
-RUN chmod 755 ./uptime
-RUN chmod 755 ./optimize
-RUN chmod 755 ./log_checker
+RUN chmod 755 ./uptime ./optimize ./log_checker
 CMD ["/bin/sh", "-c", "./optimize && ./uptime"]
