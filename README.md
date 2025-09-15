@@ -7,7 +7,10 @@ A website uptime monitoring system built with Go and Fiber.
 - Fiber-based RESTful API
 - Swagger documentation
 - MySQL data storage
-- Report management and analytics
+- Report management and analytics'
+
+
+amin h
 
 ## Prerequisites
 - Docker & Docker Compose
