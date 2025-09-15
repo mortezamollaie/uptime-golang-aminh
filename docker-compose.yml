@@ -6,7 +6,3 @@ services:
     ports:
       - "3000:3000"
     restart: always
-    environment:
-      PORT: ${PORT}
-      MYSQL_DSN: ${MYSQL_DSN}
-      UPTIME_API_KEY: ${UPTIME_API_KEY}
