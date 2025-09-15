@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
 	fiberSwagger "github.com/swaggo/fiber-swagger"
 
@@ -68,6 +69,12 @@ func startUptimeChecker() *cron.Cron {
 }
 
 func main() {
+	envLoadingErr := godotenv.Load()
+	if envLoadingErr != nil {
+		log.Fatal("Error loading base files")
+		return
+	}
+
 	// Load config
 	config.Load()
 
