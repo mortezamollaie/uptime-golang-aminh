@@ -1,17 +1,22 @@
 package optimize
 
 import (
-	"fmt"
 	"database/sql"
+	"fmt"
 )
 
 func Run(sqlDB *sql.DB) {
-	_, err := sqlDB.Exec("ALTER TABLE node_logs MODIFY COLUMN id bigint UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY")
+	// تغییر ساختار ستون id
+	_, err := sqlDB.Exec(`
+		ALTER TABLE node_logs 
+		MODIFY COLUMN id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+	`)
 	if err != nil {
 		fmt.Printf("Structure error: %v\n", err)
 	}
 
-	indexes := []struct{
+	// لیست ایندکس‌ها برای حذف و ایجاد مجدد
+	indexes := []struct {
 		name string
 		sql  string
 	}{
@@ -27,20 +32,39 @@ func Run(sqlDB *sql.DB) {
 
 	successCount := 0
 	for _, index := range indexes {
+		// اگر ایندکس وجود دارد Drop کن
 		var exists int
-		err = sqlDB.QueryRow("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = 'ms-uptime' AND table_name = 'node_logs' AND index_name = ?", index.name).Scan(&exists)
+		err = sqlDB.QueryRow(`
+			SELECT COUNT(*) 
+			FROM information_schema.statistics 
+			WHERE table_schema = DATABASE() 
+			  AND table_name = 'node_logs' 
+			  AND index_name = ?`, index.name).Scan(&exists)
 		if err == nil && exists > 0 {
-			successCount++
-			continue
+			_, dropErr := sqlDB.Exec(fmt.Sprintf("DROP INDEX %s ON node_logs", index.name))
+			if dropErr != nil {
+				fmt.Printf("Failed to drop index %s: %v\n", index.name, dropErr)
+			}
 		}
-		_, err = sqlDB.Exec(index.sql)
-		if err != nil {
-			fmt.Printf("Index %s failed: %v\n", index.name, err)
+
+		// ایجاد مجدد ایندکس
+		_, createErr := sqlDB.Exec(index.sql)
+		if createErr != nil {
+			fmt.Printf("Index %s creation failed: %v\n", index.name, createErr)
 		} else {
 			successCount++
 		}
 	}
 
-	sqlDB.Exec("ANALYZE TABLE nodes, node_logs")
-	fmt.Printf("Optimization complete: %d/%d indexes\n", successCount, len(indexes))
+	// آنالیز جداول
+	_, err = sqlDB.Exec("ANALYZE TABLE nodes")
+	if err != nil {
+		return
+	}
+	_, err = sqlDB.Exec("ANALYZE TABLE node_logs")
+	if err != nil {
+		return
+	}
+
+	fmt.Printf("Optimization complete: %d/%d indexes recreated\n", successCount, len(indexes))
 }
