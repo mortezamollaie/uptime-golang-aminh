@@ -71,8 +71,7 @@ func startUptimeChecker() *cron.Cron {
 func main() {
 	envLoadingErr := godotenv.Load()
 	if envLoadingErr != nil {
-		log.Fatal("Error loading base files")
-		return
+		log.Println("No .env file found, using system environment variables")
 	}
 
 	// Load config
