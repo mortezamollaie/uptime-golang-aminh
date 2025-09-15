@@ -15,12 +15,11 @@ import (
 
 	"uptime/config"
 	"uptime/database"
+	_ "uptime/docs"
+	"uptime/internal/logcleanup"
 	"uptime/models"
 	"uptime/monitoring"
 	"uptime/routes"
-	"uptime/internal/logcleanup"
-	"uptime/internal/optimize"
-	_ "uptime/docs"
 )
 
 // @title Uptime Monitoring API
@@ -75,20 +74,17 @@ func main() {
 	// Connect to database
 	database.Connect()
 
-	sqlDB, err := database.DB.DB()
+	_, err := database.DB.DB()
 	if err != nil {
 		log.Fatal("Failed to get database connection:", err)
 	}
-
-	log.Println("Running database optimization...")
-	optimize.Run(sqlDB)
 
 	// Start uptime checker cron
 	uptimeCron := startUptimeChecker()
 
 	// Start log cleanup cron every 5 minutes
 	logCleanupCron := cron.New()
-	_, err = logCleanupCron.AddFunc("@every 5m", func() { // ← اصلاح شده
+	_, err = logCleanupCron.AddFunc("@every 5m", func() {
 		logcleanup.CleanupOldLogs()
 	})
 	if err != nil {
