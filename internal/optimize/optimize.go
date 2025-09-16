@@ -5,9 +5,7 @@ import (
 	"fmt"
 )
 
-// Run executes the database optimization logic.
 func Run(sqlDB *sql.DB) {
-	// List of SQL statements
 	sqlStatements := []string{
 		"DROP INDEX idx_node_logs_node_id_created_at ON node_logs;",
 		"CREATE INDEX idx_node_logs_node_id_created_at ON node_logs(node_id, created_at DESC);",

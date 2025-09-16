@@ -116,13 +116,10 @@ func main() {
 	app.Use(logger.New())
 	app.Use(cors.New())
 
-	// Swagger documentation
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
-	// Setup routes
 	routes.SetupRoutes(app)
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 

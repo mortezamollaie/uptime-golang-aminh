@@ -41,6 +41,7 @@ func readBodyWithTimeout(body io.ReadCloser, ctx context.Context) ([]byte, error
 func Check(nodes []models.Node) {
 	maxWorkers := config.AppConfig.UptimeChecker.MaxWorkers
 	requestTimeout := config.AppConfig.UptimeChecker.RequestTimeout
+
 	var histories []models.History
 	if err := database.DB.Find(&histories).Error; err != nil {
 		log.Printf("Error fetching histories: %v", err)
@@ -70,14 +71,16 @@ func Check(nodes []models.Node) {
 			}
 
 			resp, err := http.DefaultClient.Do(req)
-			delay := time.Since(start).Seconds()
-
-			var status uint
-			var up bool
-			var suspended bool
-			var exception *string
+			var (
+				delay     float64
+				status    uint
+				up        bool
+				suspended bool
+				exception *string
+			)
 
 			if err != nil {
+				delay = time.Since(start).Seconds()
 				exc := fmt.Sprintf("request error: %v", err)
 				exception = &exc
 				status = 0
@@ -91,28 +94,41 @@ func Check(nodes []models.Node) {
 				defer resp.Body.Close()
 				status = uint(resp.StatusCode)
 				up = status >= 200 && status < 300
-
 				if !up {
 					exc := fmt.Sprintf("HTTP error: status %d", status)
 					exception = &exc
 				}
 
+				// خواندن کامل بدنه برای فول‌لود
 				bodyCtx, bodyCancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer bodyCancel()
+				bodyBytes, readErr := readBodyWithTimeout(resp.Body, bodyCtx)
+				bodyCancel()
 
-				bodyBytes, err := readBodyWithTimeout(resp.Body, bodyCtx)
-				if err != nil {
-					exc := fmt.Sprintf("body read error: %v", err)
+				delay = time.Since(start).Seconds()
+
+				if readErr != nil {
+					exc := fmt.Sprintf("body read error: %v", readErr)
 					exception = &exc
-					log.Printf("Error reading response body for %s: %v", n.URL, err)
+					log.Printf("Error reading response body for %s: %v", n.URL, readErr)
 				} else {
 					body := string(bodyBytes)
+
 					for _, word := range SuspendedWords {
 						if strings.Contains(strings.ToLower(body), strings.ToLower(word)) {
 							suspended = true
 							exc := "page contains suspended keywords"
 							exception = &exc
 							break
+						}
+					}
+
+					if exception == nil {
+						if strings.Contains(body, "Index of /") ||
+							strings.Contains(strings.ToLower(body), "proudly served by litespeed web server") {
+							status = 443
+							up = false
+							exc := "directory listing detected (Index of /)"
+							exception = &exc
 						}
 					}
 				}
@@ -157,8 +173,10 @@ func Check(nodes []models.Node) {
 				}
 			}
 
-			fmt.Printf("Checked: %s | Status: %d | Up: %v | Suspended: %v | Delay: %.2fs | Exception: %v\n",
-				n.URL, status, up, suspended, delay, exception)
+			fmt.Printf(
+				"Checked: %s | Status: %d | Up: %v | Suspended: %v | Delay: %.2fs | Exception: %v\n",
+				n.URL, status, up, suspended, delay, exception,
+			)
 		}
 	}
 
@@ -171,6 +189,5 @@ func Check(nodes []models.Node) {
 		jobs <- n
 	}
 	close(jobs)
-
 	wg.Wait()
 }
